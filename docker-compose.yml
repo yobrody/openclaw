@@ -1,6 +1,11 @@
+# Gateway and CLI use the same image built from the repo root. pull_policy: never
+# avoids "pull access denied" when the image is only built locally. First deploy or
+# after code changes: docker compose build && docker compose up -d
 services:
   openclaw-gateway:
     image: ${OPENCLAW_IMAGE:-openclaw:local}
+    build: .
+    pull_policy: never
     environment:
       HOME: /home/node
       TERM: xterm-256color
@@ -28,7 +33,9 @@ services:
       ]
 
   openclaw-cli:
-    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    image: ${OPENCLAW_CLI_IMAGE:-openclaw:local}
+    build: .
+    pull_policy: never
     environment:
       HOME: /home/node
       TERM: xterm-256color
