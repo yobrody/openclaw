@@ -259,6 +259,20 @@ function resolveFallbackCandidates(params: {
     addExplicitCandidate({ provider: primary.provider, model: primary.model });
   }
 
+  // Implicit fallback for OpenRouter free-tier models: when a `:free` model has no
+  // endpoints (discontinued/removed), automatically try the paid variant then auto-routing.
+  // This fires only when there are no configured fallbacks and the paid variant isn't
+  // already in the chain, so it adds no overhead for users with explicit fallbacks.
+  if (
+    params.fallbacksOverride === undefined &&
+    normalizedPrimary.provider === "openrouter" &&
+    normalizedPrimary.model.endsWith(":free")
+  ) {
+    const paidVariant = normalizedPrimary.model.slice(0, -":free".length);
+    addExplicitCandidate({ provider: "openrouter", model: paidVariant });
+    addExplicitCandidate({ provider: "openrouter", model: "auto" });
+  }
+
   return candidates;
 }
 
