@@ -902,6 +902,20 @@ export const FIELD_HELP: Record<string, string> = {
   "agents.defaults.model.primary": "Primary model (provider/model).",
   "agents.defaults.model.fallbacks":
     "Ordered fallback models (provider/model). Used when the primary model fails.",
+  "agents.defaults.model.routing":
+    "Per-message model routing rules. Each rule is evaluated top-down against the prompt; the first matching rule's model is used instead of the primary. Useful for routing simple requests to cheaper models and complex ones to more capable models. Conditions within a rule are ANDed. Hooks can still override the result.",
+  "agents.defaults.model.routing.*.model":
+    "Model to use when this rule matches (provider/model, e.g. 'openrouter/deepseek/deepseek-r1:free').",
+  "agents.defaults.model.routing.*.contains":
+    "All listed keywords must appear in the prompt (case-insensitive) for this rule to match.",
+  "agents.defaults.model.routing.*.containsAny":
+    "At least one listed keyword must appear in the prompt (case-insensitive) for this rule to match.",
+  "agents.defaults.model.routing.*.regex":
+    "Case-insensitive regex that must match the prompt for this rule to fire.",
+  "agents.defaults.model.routing.*.maxLength":
+    "Prompt must be at most this many characters. Use to route short/quick requests to lighter models.",
+  "agents.defaults.model.routing.*.minLength":
+    "Prompt must be at least this many characters. Use to route long/complex requests to more capable models.",
   "agents.defaults.imageModel.primary":
     "Optional image model (provider/model) used when the primary model lacks image input.",
   "agents.defaults.imageModel.fallbacks": "Ordered fallback image models (provider/model).",
