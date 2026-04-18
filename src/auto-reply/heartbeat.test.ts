@@ -236,4 +236,24 @@ Check the server logs
 `;
     expect(isHeartbeatContentEffectivelyEmpty(content)).toBe(true);
   });
+
+  it("returns true for empty ordered list items", () => {
+    expect(isHeartbeatContentEffectivelyEmpty("1.")).toBe(true);
+    expect(isHeartbeatContentEffectivelyEmpty("1. ")).toBe(true);
+    expect(isHeartbeatContentEffectivelyEmpty("2.\n3.")).toBe(true);
+    expect(isHeartbeatContentEffectivelyEmpty("# HEARTBEAT.md\n1.\n2.")).toBe(true);
+  });
+
+  it("returns true for empty ordered list items with empty checkboxes", () => {
+    expect(isHeartbeatContentEffectivelyEmpty("1. [ ]")).toBe(true);
+    expect(isHeartbeatContentEffectivelyEmpty("1. [X]")).toBe(true);
+    expect(isHeartbeatContentEffectivelyEmpty("1. [x]")).toBe(true);
+    expect(isHeartbeatContentEffectivelyEmpty("# Tasks\n1. [ ]\n2. [ ]")).toBe(true);
+  });
+
+  it("returns false for ordered list items with content", () => {
+    expect(isHeartbeatContentEffectivelyEmpty("1. Do the laundry")).toBe(false);
+    expect(isHeartbeatContentEffectivelyEmpty("1. [X] Done task")).toBe(false);
+    expect(isHeartbeatContentEffectivelyEmpty("# HEARTBEAT.md\n1. Task 1")).toBe(false);
+  });
 });

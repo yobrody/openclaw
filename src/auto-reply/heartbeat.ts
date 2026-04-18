@@ -45,6 +45,10 @@ export function isHeartbeatContentEffectivelyEmpty(content: string | undefined |
     if (/^[-*+]\s*(\[[\sXx]?\]\s*)?$/.test(trimmed)) {
       continue;
     }
+    // Skip empty ordered list items like "1." or "1. [ ]" or "2. [X]"
+    if (/^\d+\.\s*(\[[\sXx]?\]\s*)?$/.test(trimmed)) {
+      continue;
+    }
     // Found a non-empty, non-comment line - there's actionable content
     return false;
   }
