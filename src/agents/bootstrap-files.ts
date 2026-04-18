@@ -82,8 +82,8 @@ export async function resolveBootstrapContextForRun(params: {
 }> {
   const bootstrapFiles = await resolveBootstrapFilesForRun(params);
   const contextFiles = buildBootstrapContextFiles(bootstrapFiles, {
-    maxChars: resolveBootstrapMaxChars(params.config),
-    totalMaxChars: resolveBootstrapTotalMaxChars(params.config),
+    maxChars: resolveBootstrapMaxChars(params.config, params.agentId),
+    totalMaxChars: resolveBootstrapTotalMaxChars(params.config, params.agentId),
     warn: params.warn,
   });
   return { bootstrapFiles, contextFiles };

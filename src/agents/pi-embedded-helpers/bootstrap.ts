@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { OpenClawConfig } from "../../config/config.js";
+import { resolveAgentConfig } from "../agent-scope.js";
 import { truncateUtf16Safe } from "../../utils.js";
 import type { WorkspaceBootstrapFile } from "../workspace.js";
 import type { EmbeddedContextFile } from "./types.js";
@@ -95,7 +96,13 @@ type TrimBootstrapResult = {
   originalLength: number;
 };
 
-export function resolveBootstrapMaxChars(cfg?: OpenClawConfig): number {
+export function resolveBootstrapMaxChars(cfg?: OpenClawConfig, agentId?: string): number {
+  if (agentId && cfg) {
+    const perAgent = resolveAgentConfig(cfg, agentId)?.bootstrapMaxChars;
+    if (typeof perAgent === "number" && Number.isFinite(perAgent) && perAgent > 0) {
+      return Math.floor(perAgent);
+    }
+  }
   const raw = cfg?.agents?.defaults?.bootstrapMaxChars;
   if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
     return Math.floor(raw);
@@ -103,7 +110,13 @@ export function resolveBootstrapMaxChars(cfg?: OpenClawConfig): number {
   return DEFAULT_BOOTSTRAP_MAX_CHARS;
 }
 
-export function resolveBootstrapTotalMaxChars(cfg?: OpenClawConfig): number {
+export function resolveBootstrapTotalMaxChars(cfg?: OpenClawConfig, agentId?: string): number {
+  if (agentId && cfg) {
+    const perAgent = resolveAgentConfig(cfg, agentId)?.bootstrapTotalMaxChars;
+    if (typeof perAgent === "number" && Number.isFinite(perAgent) && perAgent > 0) {
+      return Math.floor(perAgent);
+    }
+  }
   const raw = cfg?.agents?.defaults?.bootstrapTotalMaxChars;
   if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
     return Math.floor(raw);

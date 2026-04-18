@@ -469,7 +469,7 @@ export async function runMemoryStatus(opts: MemoryCommandOptions) {
     if (status.workspaceDir) {
       const memSize = await readMemoryFileSize(
         status.workspaceDir,
-        resolveBootstrapMaxChars(cfg),
+        resolveBootstrapMaxChars(cfg, agentId),
       );
       if (memSize) {
         const pct = Math.round((memSize.chars / memSize.maxChars) * 100);
@@ -845,7 +845,7 @@ export function registerMemoryCli(program: Command) {
       const cfg = loadConfig();
       const agentId = resolveAgent(cfg, opts.agent);
       const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
-      const maxChars = resolveBootstrapMaxChars(cfg);
+      const maxChars = resolveBootstrapMaxChars(cfg, agentId);
 
       const memoryFile = path.join(workspaceDir, "MEMORY.md");
       const altMemoryFile = path.join(workspaceDir, "memory.md");

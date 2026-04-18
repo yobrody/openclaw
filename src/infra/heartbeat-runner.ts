@@ -6,10 +6,7 @@ import {
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
 import { appendCronStyleCurrentTimeLine } from "../agents/current-time.js";
-import {
-  DEFAULT_BOOTSTRAP_MAX_CHARS,
-  resolveBootstrapMaxChars,
-} from "../agents/pi-embedded-helpers/bootstrap.js";
+import { resolveBootstrapMaxChars } from "../agents/pi-embedded-helpers/bootstrap.js";
 import { resolveEffectiveMessagesConfig } from "../agents/identity.js";
 import {
   DEFAULT_HEARTBEAT_FILENAME,
@@ -716,16 +713,17 @@ export async function runHeartbeatOnce(opts: {
   const memOverLimit = !hasExecCompletion && !hasCronEvents
     ? await checkMemoryOverLimit(
         resolveAgentWorkspaceDir(cfg, agentId),
-        resolveBootstrapMaxChars(cfg),
+        resolveBootstrapMaxChars(cfg, agentId),
       ).catch(() => null)
     : null;
+  const resolvedMaxChars = resolveBootstrapMaxChars(cfg, agentId);
   const memTrimInstruction = memOverLimit
     ? [
         `URGENT: ${DEFAULT_MEMORY_FILENAME} is ${memOverLimit.overBy.toLocaleString()} chars over the`,
-        `${DEFAULT_BOOTSTRAP_MAX_CHARS.toLocaleString()}-char bootstrap limit.`,
+        `${resolvedMaxChars.toLocaleString()}-char bootstrap limit.`,
         `This prevents full startup context on every session and /new.`,
         `Please: (1) read ${DEFAULT_MEMORY_FILENAME}, (2) remove old/resolved/duplicate entries,`,
-        `(3) overwrite it with the compacted content under ${DEFAULT_BOOTSTRAP_MAX_CHARS.toLocaleString()} chars.`,
+        `(3) overwrite it with the compacted content under ${resolvedMaxChars.toLocaleString()} chars.`,
         `Reply HEARTBEAT_OK when done.`,
       ].join(" ")
     : null;
