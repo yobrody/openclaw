@@ -514,6 +514,15 @@ describe("classifyFailoverReason", () => {
       ),
     ).toBe("rate_limit");
   });
+  it("classifies OpenRouter 'no endpoints found' as model_not_found", () => {
+    // OpenRouter returns this when a free-tier model has no serving backends.
+    expect(
+      classifyFailoverReason("404 No endpoints found for meta-llama/llama-4-scout:free."),
+    ).toBe("model_not_found");
+    expect(classifyFailoverReason("No endpoints found for mistralai/mistral-7b:free")).toBe(
+      "model_not_found",
+    );
+  });
   it("classifies permanent auth errors as auth_permanent", () => {
     expect(classifyFailoverReason("invalid_api_key")).toBe("auth_permanent");
     expect(classifyFailoverReason("Your api key has been revoked")).toBe("auth_permanent");

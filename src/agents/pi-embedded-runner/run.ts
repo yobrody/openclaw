@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import type { ThinkLevel } from "../../auto-reply/thinking.js";
+import { resolveAgentModelFromRouting } from "../../config/model-input.js";
 import { generateSecureToken } from "../../infra/secure-random.js";
 import { getGlobalHookRunner } from "../../plugins/hook-runner-global.js";
 import type { PluginHookBeforeAgentStartResult } from "../../plugins/types.js";
@@ -29,7 +30,7 @@ import {
   resolveAuthProfileOrder,
   type ResolvedProviderAuth,
 } from "../model-auth.js";
-import { normalizeProviderId } from "../model-selection.js";
+import { normalizeProviderId, parseModelRef } from "../model-selection.js";
 import { ensureOpenClawModelsJson } from "../models-config.js";
 import {
   formatBillingErrorMessage,
@@ -237,6 +238,21 @@ export async function runEmbeddedPiAgent(
         sessionKey: params.sessionKey,
       });
       await ensureOpenClawModelsJson(params.config, agentDir);
+
+      // Config-driven per-message routing: evaluate routing rules against the prompt.
+      // Runs before plugin hooks so hooks can still override the routing decision.
+      const routingModel = resolveAgentModelFromRouting(
+        params.config?.agents?.defaults?.model,
+        params.prompt,
+      );
+      if (routingModel) {
+        const routingRef = parseModelRef(routingModel, DEFAULT_PROVIDER);
+        if (routingRef) {
+          provider = routingRef.provider;
+          modelId = routingRef.model;
+          log.info(`[routing] model selected by routing rule: ${provider}/${modelId}`);
+        }
+      }
 
       // Run before_model_resolve hooks early so plugins can override the
       // provider/model before resolveModel().

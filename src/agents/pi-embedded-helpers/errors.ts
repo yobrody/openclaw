@@ -860,6 +860,8 @@ export function isModelNotFoundErrorMessage(raw: string): boolean {
     lower.includes("model not found") ||
     lower.includes("model_not_found") ||
     lower.includes("not_found_error") ||
+    // OpenRouter: "No endpoints found for <model>" — free-tier model unavailable/discontinued.
+    lower.includes("no endpoints found") ||
     (lower.includes("does not exist") && lower.includes("model")) ||
     (lower.includes("invalid model") && !lower.includes("invalid model reference"))
   ) {

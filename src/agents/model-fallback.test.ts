@@ -1098,6 +1098,54 @@ describe("runWithModelFallback", () => {
   });
 });
 
+describe("implicit free-tier fallback for OpenRouter :free models", () => {
+  it("falls back to paid variant then auto when :free model has no endpoints and no fallbacks configured", async () => {
+    // OpenRouter returns "404 No endpoints found for meta-llama/llama-4-scout:free."
+    const noEndpointsErr = Object.assign(
+      new Error("404 No endpoints found for meta-llama/llama-4-scout:free."),
+      { status: 404 },
+    );
+    const run = vi
+      .fn()
+      .mockRejectedValueOnce(noEndpointsErr) // :free fails
+      .mockRejectedValueOnce(new Error("timeout")) // paid variant fails
+      .mockResolvedValueOnce("auto ok"); // openrouter/auto succeeds
+
+    const result = await runWithModelFallback({
+      cfg: undefined,
+      provider: "openrouter",
+      model: "meta-llama/llama-4-scout:free",
+      run,
+    });
+
+    expect(result.result).toBe("auto ok");
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(run).toHaveBeenNthCalledWith(1, "openrouter", "meta-llama/llama-4-scout:free");
+    expect(run).toHaveBeenNthCalledWith(2, "openrouter", "meta-llama/llama-4-scout");
+    expect(run).toHaveBeenNthCalledWith(3, "openrouter", "auto");
+  });
+
+  it("skips implicit fallback when explicit fallbacks are configured via fallbacksOverride", async () => {
+    const noEndpointsErr = Object.assign(
+      new Error("No endpoints found for mistralai/mistral-7b:free."),
+      { status: 404 },
+    );
+    const run = vi.fn().mockRejectedValueOnce(noEndpointsErr).mockResolvedValueOnce("explicit ok");
+
+    const result = await runWithModelFallback({
+      cfg: undefined,
+      provider: "openrouter",
+      model: "mistralai/mistral-7b:free",
+      fallbacksOverride: ["openrouter/mistralai/mistral-7b"],
+      run,
+    });
+
+    expect(result.result).toBe("explicit ok");
+    expect(run).toHaveBeenCalledTimes(2);
+    expect(run).toHaveBeenNthCalledWith(2, "openrouter", "mistralai/mistral-7b");
+  });
+});
+
 describe("runWithImageModelFallback", () => {
   it("keeps explicit image fallbacks reachable when models allowlist is present", async () => {
     const cfg = makeCfg({
