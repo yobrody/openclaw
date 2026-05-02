@@ -269,8 +269,8 @@ function resolveFallbackCandidates(params: {
     normalizedPrimary.model.endsWith(":free")
   ) {
     const paidVariant = normalizedPrimary.model.slice(0, -":free".length);
-    addExplicitCandidate({ provider: "openrouter", model: paidVariant });
-    addExplicitCandidate({ provider: "openrouter", model: "auto" });
+    addExplicitCandidate(normalizeModelRef("openrouter", paidVariant));
+    addExplicitCandidate(normalizeModelRef("openrouter", "auto"));
   }
 
   return candidates;
