@@ -49,8 +49,8 @@ async function resolveContextReport(
     return existing;
   }
 
-  const bootstrapMaxChars = resolveBootstrapMaxChars(params.cfg);
-  const bootstrapTotalMaxChars = resolveBootstrapTotalMaxChars(params.cfg);
+  const bootstrapMaxChars = resolveBootstrapMaxChars(params.cfg, params.agentId);
+  const bootstrapTotalMaxChars = resolveBootstrapTotalMaxChars(params.cfg, params.agentId);
   const { systemPrompt, tools, skillsPrompt, bootstrapFiles, injectedFiles, sandboxRuntime } =
     await resolveCommandsSystemPromptBundle(params);
 
@@ -173,7 +173,7 @@ export async function buildContextReply(params: HandleCommandsParams): Promise<R
       ? [
           `⚠ Bootstrap context is over configured limits: ${truncatedBootstrapFiles.length} file(s) truncated (${formatInt(rawBootstrapChars)} raw chars -> ${formatInt(injectedBootstrapChars)} injected chars).`,
           ...(truncationCauseParts.length ? [`Causes: ${truncationCauseParts.join("; ")}.`] : []),
-          "Tip: increase `agents.defaults.bootstrapMaxChars` and/or `agents.defaults.bootstrapTotalMaxChars` if this truncation is not intentional.",
+          "Tip: increase `agents.defaults.bootstrapMaxChars` (or per-agent `bootstrapMaxChars` in `agents.list`) and/or `agents.defaults.bootstrapTotalMaxChars` if this truncation is not intentional.",
         ]
       : [];
 

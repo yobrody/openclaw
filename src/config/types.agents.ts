@@ -32,6 +32,10 @@ export type AgentConfig = {
   /** Optional per-agent stream params (e.g. cacheRetention, temperature). */
   params?: Record<string, unknown>;
   tools?: AgentToolsConfig;
+  /** Per-agent bootstrap file char limit (overrides agents.defaults.bootstrapMaxChars). */
+  bootstrapMaxChars?: number;
+  /** Per-agent total bootstrap chars limit (overrides agents.defaults.bootstrapTotalMaxChars). */
+  bootstrapTotalMaxChars?: number;
 };
 
 export type AgentsConfig = {

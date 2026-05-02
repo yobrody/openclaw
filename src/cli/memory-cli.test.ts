@@ -18,6 +18,7 @@ vi.mock("../config/config.js", () => ({
 
 vi.mock("../agents/agent-scope.js", () => ({
   resolveDefaultAgentId,
+  resolveAgentConfig: vi.fn(() => undefined),
 }));
 
 let registerMemoryCli: typeof import("./memory-cli.js").registerMemoryCli;

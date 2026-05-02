@@ -1,9 +1,14 @@
+import { spawnSync } from "node:child_process";
 import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { Command } from "commander";
-import { resolveDefaultAgentId } from "../agents/agent-scope.js";
+import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
+import {
+  DEFAULT_BOOTSTRAP_MAX_CHARS,
+  resolveBootstrapMaxChars,
+} from "../agents/pi-embedded-helpers/bootstrap.js";
 import { loadConfig } from "../config/config.js";
 import { resolveStateDir } from "../config/paths.js";
 import { resolveSessionTranscriptsDirForAgent } from "../config/sessions/paths.js";
@@ -144,6 +149,37 @@ async function scanSessionFiles(agentId: string): Promise<SourceScan> {
     );
     return { source: "sessions", totalFiles: null, issues };
   }
+}
+
+type MemoryFileSizeInfo = {
+  file: string;
+  chars: number;
+  maxChars: number;
+  isOver: boolean;
+  overBy: number;
+};
+
+async function readMemoryFileSize(
+  workspaceDir: string,
+  maxChars: number,
+): Promise<MemoryFileSizeInfo | null> {
+  const candidates = [
+    path.join(workspaceDir, "MEMORY.md"),
+    path.join(workspaceDir, "memory.md"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const content = await fs.readFile(candidate, "utf-8");
+      const chars = content.length;
+      const overBy = Math.max(0, chars - maxChars);
+      return { file: candidate, chars, maxChars, isOver: overBy > 0, overBy };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        return null;
+      }
+    }
+  }
+  return null;
 }
 
 async function scanMemoryFiles(
@@ -429,6 +465,24 @@ export async function runMemoryStatus(opts: MemoryCommandOptions) {
       `${label("Store")} ${info(storePath)}`,
       `${label("Workspace")} ${info(workspacePath)}`,
     ].filter(Boolean) as string[];
+    // Show MEMORY.md size vs bootstrap limit
+    if (status.workspaceDir) {
+      const memSize = await readMemoryFileSize(
+        status.workspaceDir,
+        resolveBootstrapMaxChars(cfg, agentId),
+      );
+      if (memSize) {
+        const pct = Math.round((memSize.chars / memSize.maxChars) * 100);
+        const sizeLabel = `${memSize.chars.toLocaleString()} / ${memSize.maxChars.toLocaleString()} chars (${pct}%)`;
+        if (memSize.isOver) {
+          lines.push(
+            `${label("MEMORY.md")} ${warn(sizeLabel)} ${warn(`— ${memSize.overBy.toLocaleString()} chars over limit; run: openclaw memory trim`)}`,
+          );
+        } else {
+          lines.push(`${label("MEMORY.md")} ${success(sizeLabel)}`);
+        }
+      }
+    }
     if (embeddingProbe) {
       const state = embeddingProbe.ok ? "ready" : "unavailable";
       const stateColor = embeddingProbe.ok ? theme.success : theme.warn;
@@ -769,4 +823,149 @@ export function registerMemoryCli(program: Command) {
         });
       },
     );
+
+  memory
+    .command("trim")
+    .description(
+      `Show MEMORY.md size vs the bootstrap limit (default: ${DEFAULT_BOOTSTRAP_MAX_CHARS.toLocaleString()} chars) and open it for editing`,
+    )
+    .option("--agent <id>", "Agent id (default: default agent)")
+    .option("--json", "Output machine-readable JSON")
+    .addHelpText(
+      "after",
+      () =>
+        `\n${theme.heading("Examples:")}\n${formatHelpExamples([
+          ["openclaw memory trim", "Show MEMORY.md size and open in $EDITOR."],
+          ["openclaw memory trim --json", "Output size info as JSON."],
+          ["openclaw memory trim --agent my-agent", "Trim for a specific agent."],
+        ])}\n`,
+    )
+    .action(async (opts: MemoryCommandOptions) => {
+      setVerbose(Boolean(opts.verbose));
+      const cfg = loadConfig();
+      const agentId = resolveAgent(cfg, opts.agent);
+      const workspaceDir = resolveAgentWorkspaceDir(cfg, agentId);
+      const maxChars = resolveBootstrapMaxChars(cfg, agentId);
+
+      const memoryFile = path.join(workspaceDir, "MEMORY.md");
+      const altMemoryFile = path.join(workspaceDir, "memory.md");
+
+      let targetFile: string | null = null;
+      let content = "";
+      for (const candidate of [memoryFile, altMemoryFile]) {
+        try {
+          content = await fs.readFile(candidate, "utf-8");
+          targetFile = candidate;
+          break;
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+            defaultRuntime.error(
+              `Failed to read ${shortenHomePath(candidate)}: ${(err as NodeJS.ErrnoException).code ?? "error"}`,
+            );
+            process.exitCode = 1;
+            return;
+          }
+        }
+      }
+
+      if (!targetFile) {
+        if (opts.json) {
+          defaultRuntime.log(
+            JSON.stringify({ file: memoryFile, exists: false, chars: 0, maxChars }),
+          );
+          return;
+        }
+        defaultRuntime.log(`No MEMORY.md found at ${shortenHomePath(memoryFile)}`);
+        return;
+      }
+
+      const chars = content.length;
+      const overBy = Math.max(0, chars - maxChars);
+      const isOver = overBy > 0;
+      const pct = Math.round((chars / maxChars) * 100);
+
+      if (opts.json) {
+        defaultRuntime.log(
+          JSON.stringify({ file: targetFile, exists: true, chars, maxChars, overBy, isOver }),
+        );
+        return;
+      }
+
+      const rich = isRich();
+      const heading = (text: string) => colorize(rich, theme.heading, text);
+      const muted = (text: string) => colorize(rich, theme.muted, text);
+      const info = (text: string) => colorize(rich, theme.info, text);
+      const successFn = (text: string) => colorize(rich, theme.success, text);
+      const warnFn = (text: string) => colorize(rich, theme.warn, text);
+      const label = (text: string) => muted(`${text}:`);
+
+      const sizeColor = isOver ? theme.warn : theme.success;
+      const lines: string[] = [
+        `${heading("MEMORY.md")} ${muted(`(${agentId})`)}`,
+        `${label("File")}    ${info(shortenHomePath(targetFile))}`,
+        `${label("Size")}    ${colorize(rich, sizeColor, `${chars.toLocaleString()} chars`)} ${muted(`/ ${maxChars.toLocaleString()} limit (${pct}%)`)}`,
+      ];
+
+      if (isOver) {
+        // Mirror the head/tail split used in buildBootstrapContextFiles
+        const headChars = Math.floor(maxChars * 0.7);
+        const tailChars = Math.floor(maxChars * 0.2);
+        const hiddenChars = chars - headChars - tailChars;
+        lines.push(
+          `${label("Truncated")} ${warnFn(`${overBy.toLocaleString()} chars over limit`)} ${muted(`— model sees first ${headChars.toLocaleString()} + last ${tailChars.toLocaleString()} chars; ${hiddenChars.toLocaleString()} chars hidden`)}`,
+        );
+        lines.push("");
+        lines.push(
+          warnFn("Trim old or resolved entries so the model sees full context on startup and /new."),
+        );
+      } else {
+        lines.push(successFn("Within limit — no truncation."));
+      }
+
+      defaultRuntime.log(lines.join("\n"));
+
+      // Open in $EDITOR
+      const editor = (process.env.EDITOR ?? process.env.VISUAL ?? "").trim();
+      if (!editor) {
+        defaultRuntime.log(
+          `\n${muted(`$EDITOR is not set. Edit manually: ${shortenHomePath(targetFile)}`)}`,
+        );
+        return;
+      }
+
+      defaultRuntime.log(`\n${muted(`Opening in ${editor}…`)}`);
+      const editorResult = spawnSync(editor, [targetFile], { stdio: "inherit" });
+      if (editorResult.error) {
+        defaultRuntime.error(`Editor error: ${editorResult.error.message}`);
+        process.exitCode = 1;
+        return;
+      }
+
+      // Re-report size after editing
+      try {
+        const newContent = await fs.readFile(targetFile, "utf-8");
+        const newChars = newContent.length;
+        const newOverBy = Math.max(0, newChars - maxChars);
+        const newIsOver = newOverBy > 0;
+        const newPct = Math.round((newChars / maxChars) * 100);
+        const saved = chars - newChars;
+        const newSizeColor = newIsOver ? theme.warn : theme.success;
+
+        const afterLines: string[] = [
+          "",
+          `${label("New size")} ${colorize(rich, newSizeColor, `${newChars.toLocaleString()} chars`)} ${muted(`(${newPct}% of limit)`)}`,
+        ];
+        if (saved > 0) {
+          afterLines.push(`${label("Saved")}    ${successFn(`${saved.toLocaleString()} chars`)}`);
+        }
+        afterLines.push(
+          newIsOver
+            ? warnFn(`Still ${newOverBy.toLocaleString()} chars over limit — keep trimming.`)
+            : successFn("Now within limit."),
+        );
+        defaultRuntime.log(afterLines.join("\n"));
+      } catch {
+        // ignore re-read errors after edit
+      }
+    });
 }

@@ -565,8 +565,8 @@ export async function runEmbeddedAttempt(
       provider: params.provider,
       model: params.modelId,
       workspaceDir: effectiveWorkspace,
-      bootstrapMaxChars: resolveBootstrapMaxChars(params.config),
-      bootstrapTotalMaxChars: resolveBootstrapTotalMaxChars(params.config),
+      bootstrapMaxChars: resolveBootstrapMaxChars(params.config, sessionAgentId),
+      bootstrapTotalMaxChars: resolveBootstrapTotalMaxChars(params.config, sessionAgentId),
       sandbox: (() => {
         const runtime = resolveSandboxRuntimeStatus({
           cfg: params.config,

@@ -6,8 +6,13 @@ import {
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
 import { appendCronStyleCurrentTimeLine } from "../agents/current-time.js";
+import { resolveBootstrapMaxChars } from "../agents/pi-embedded-helpers/bootstrap.js";
 import { resolveEffectiveMessagesConfig } from "../agents/identity.js";
-import { DEFAULT_HEARTBEAT_FILENAME } from "../agents/workspace.js";
+import {
+  DEFAULT_HEARTBEAT_FILENAME,
+  DEFAULT_MEMORY_FILENAME,
+  DEFAULT_MEMORY_ALT_FILENAME,
+} from "../agents/workspace.js";
 import { resolveHeartbeatReplyPayload } from "../auto-reply/heartbeat-reply-payload.js";
 import {
   DEFAULT_HEARTBEAT_ACK_MAX_CHARS,
@@ -72,6 +77,35 @@ export type HeartbeatDeps = OutboundSendDeps &
     getQueueSize?: (lane?: string) => number;
     nowMs?: () => number;
   };
+
+/**
+ * Returns how many chars MEMORY.md is over the bootstrap limit, or 0 if within limit / missing.
+ * Used to inject an auto-trim instruction into the heartbeat prompt.
+ */
+async function checkMemoryOverLimit(
+  workspaceDir: string,
+  maxChars: number,
+): Promise<{ overBy: number; file: string } | null> {
+  const candidates = [
+    path.join(workspaceDir, DEFAULT_MEMORY_FILENAME),
+    path.join(workspaceDir, DEFAULT_MEMORY_ALT_FILENAME),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const content = await fs.readFile(candidate, "utf-8");
+      const overBy = content.length - maxChars;
+      if (overBy > 0) {
+        return { overBy, file: DEFAULT_MEMORY_FILENAME };
+      }
+      return null;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        return null;
+      }
+    }
+  }
+  return null;
+}
 
 const log = createSubsystemLogger("gateway/heartbeat");
 let heartbeatsEnabled = true;
@@ -673,8 +707,32 @@ export async function runHeartbeatOnce(opts: {
     preflight,
     canRelayToUser,
   });
+
+  // If MEMORY.md is over the bootstrap limit, inject a self-healing trim instruction
+  // so the agent compacts it during this heartbeat turn instead of failing on startup.
+  const memOverLimit = !hasExecCompletion && !hasCronEvents
+    ? await checkMemoryOverLimit(
+        resolveAgentWorkspaceDir(cfg, agentId),
+        resolveBootstrapMaxChars(cfg, agentId),
+      ).catch(() => null)
+    : null;
+  const resolvedMaxChars = resolveBootstrapMaxChars(cfg, agentId);
+  const memTrimInstruction = memOverLimit
+    ? [
+        `URGENT: ${DEFAULT_MEMORY_FILENAME} is ${memOverLimit.overBy.toLocaleString()} chars over the`,
+        `${resolvedMaxChars.toLocaleString()}-char bootstrap limit.`,
+        `This prevents full startup context on every session and /new.`,
+        `Please: (1) read ${DEFAULT_MEMORY_FILENAME}, (2) remove old/resolved/duplicate entries,`,
+        `(3) overwrite it with the compacted content under ${resolvedMaxChars.toLocaleString()} chars.`,
+        `Reply HEARTBEAT_OK when done.`,
+      ].join(" ")
+    : null;
+  const effectivePrompt = memTrimInstruction
+    ? `${memTrimInstruction}\n\n${prompt}`
+    : prompt;
+
   const ctx = {
-    Body: appendCronStyleCurrentTimeLine(prompt, cfg, startedAt),
+    Body: appendCronStyleCurrentTimeLine(effectivePrompt, cfg, startedAt),
     From: sender,
     To: sender,
     OriginatingChannel: delivery.channel !== "none" ? delivery.channel : undefined,
