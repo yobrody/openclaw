@@ -44,6 +44,8 @@ import {
   AgentWaitParamsSchema,
   type ChannelsLogoutParams,
   ChannelsLogoutParamsSchema,
+  type ChannelsRestartParams,
+  ChannelsRestartParamsSchema,
   type TalkConfigParams,
   TalkConfigParamsSchema,
   type TalkConfigResult,
@@ -320,6 +322,9 @@ export const validateChannelsStatusParams = ajv.compile<ChannelsStatusParams>(
 export const validateChannelsLogoutParams = ajv.compile<ChannelsLogoutParams>(
   ChannelsLogoutParamsSchema,
 );
+export const validateChannelsRestartParams = ajv.compile<ChannelsRestartParams>(
+  ChannelsRestartParamsSchema,
+);
 export const validateModelsListParams = ajv.compile<ModelsListParams>(ModelsListParamsSchema);
 export const validateSkillsStatusParams = ajv.compile<SkillsStatusParams>(SkillsStatusParamsSchema);
 export const validateToolsCatalogParams = ajv.compile<ToolsCatalogParams>(ToolsCatalogParamsSchema);
@@ -471,6 +476,7 @@ export {
   ChannelsStatusParamsSchema,
   ChannelsStatusResultSchema,
   ChannelsLogoutParamsSchema,
+  ChannelsRestartParamsSchema,
   WebLoginStartParamsSchema,
   WebLoginWaitParamsSchema,
   AgentSummarySchema,
@@ -561,6 +567,7 @@ export type {
   ChannelsStatusParams,
   ChannelsStatusResult,
   ChannelsLogoutParams,
+  ChannelsRestartParams,
   WebLoginStartParams,
   WebLoginWaitParams,
   AgentSummary,
