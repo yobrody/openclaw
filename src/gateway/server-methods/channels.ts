@@ -18,6 +18,7 @@ import {
   errorShape,
   formatValidationErrors,
   validateChannelsLogoutParams,
+  validateChannelsRestartParams,
   validateChannelsStatusParams,
 } from "../protocol/index.js";
 import { formatForLog } from "../ws-log.js";
@@ -285,6 +286,47 @@ export const channelsHandlers: GatewayRequestHandlers = {
         plugin,
       });
       respond(true, payload, undefined);
+    } catch (err) {
+      respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
+    }
+  },
+  "channels.restart": async ({ params, respond, context }) => {
+    if (!validateChannelsRestartParams(params)) {
+      respond(
+        false,
+        undefined,
+        errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `invalid channels.restart params: ${formatValidationErrors(validateChannelsRestartParams.errors)}`,
+        ),
+      );
+      return;
+    }
+    const rawChannel = (params as { channel?: unknown }).channel;
+    const channelId = typeof rawChannel === "string" ? normalizeChannelId(rawChannel) : null;
+    if (!channelId) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, "invalid channels.restart channel"),
+      );
+      return;
+    }
+    const plugin = getChannelPlugin(channelId);
+    if (!plugin?.gateway?.startAccount) {
+      respond(
+        false,
+        undefined,
+        errorShape(ErrorCodes.INVALID_REQUEST, `channel ${channelId} does not support restart`),
+      );
+      return;
+    }
+    const accountIdRaw = (params as { accountId?: unknown }).accountId;
+    const accountId = typeof accountIdRaw === "string" ? accountIdRaw.trim() : undefined;
+    try {
+      await context.stopChannel(channelId, accountId);
+      await context.startChannel(channelId, accountId);
+      respond(true, { channel: channelId, accountId: accountId ?? null, restarted: true });
     } catch (err) {
       respond(false, undefined, errorShape(ErrorCodes.UNAVAILABLE, formatForLog(err)));
     }

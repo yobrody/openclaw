@@ -16,6 +16,7 @@ import { runChannelLogin, runChannelLogout } from "./channel-auth.js";
 import { formatCliChannelOptions } from "./channel-options.js";
 import { runCommandWithRuntime } from "./cli-utils.js";
 import { hasExplicitOptions } from "./command-options.js";
+import { callGatewayFromCli } from "./gateway-rpc.js";
 import { formatHelpExamples } from "./help-format.js";
 
 const optionNamesAdd = [
@@ -252,5 +253,32 @@ export function registerChannelsCli(program: Command) {
           defaultRuntime,
         );
       }, "Channel logout failed");
+    });
+
+  channels
+    .command("restart")
+    .description("Stop and restart a channel account (clears error state, resets connection)")
+    .argument("<channel>", `Channel to restart (${channelNames})`)
+    .option("--account <id>", "Account id (accountId)")
+    .option("--url <url>", "Gateway WebSocket URL")
+    .option("--token <token>", "Gateway token (if required)")
+    .option("--json", "Output JSON", false)
+    .action(async (channel: string, opts) => {
+      await runChannelsCommandWithDanger(async () => {
+        const result = await callGatewayFromCli(
+          "channels.restart",
+          { url: opts.url, token: opts.token, json: opts.json },
+          { channel, accountId: opts.account },
+        );
+        if (opts.json) {
+          defaultRuntime.log(JSON.stringify(result, null, 2));
+        } else {
+          const payload = result as { channel?: string; accountId?: string | null };
+          const label = payload.accountId
+            ? `${payload.channel}/${payload.accountId}`
+            : payload.channel;
+          defaultRuntime.log(`Channel ${label} restarted.`);
+        }
+      }, "Channel restart failed");
     });
 }
