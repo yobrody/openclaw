@@ -1,4 +1,4 @@
-import { computeBackoff, sleepWithAbort, type BackoffPolicy } from "../infra/backoff.js";
+import { computeBackoff, type BackoffPolicy } from "../infra/backoff.js";
 
 export type TelegramSendChatActionLogger = (message: string) => void;
 
@@ -61,7 +61,10 @@ function is401Error(error: unknown): boolean {
  * across all message contexts. This prevents the infinite loop that caused Telegram
  * to delete bots (issue #27092).
  *
- * When a 401 occurs, exponential backoff is applied (1s → 2s → 4s → ... → 5min).
+ * When a 401 occurs, a backoff deadline is recorded. Calls during the backoff window
+ * return immediately (skip) instead of sleeping — this avoids blocking message
+ * delivery pipelines that await the typing indicator before sending reply text.
+ *
  * After maxConsecutive401 failures (default 10), all sendChatAction calls are
  * suspended until reset() is called.
  */
@@ -72,10 +75,13 @@ export function createTelegramSendChatActionHandler({
 }: CreateTelegramSendChatActionHandlerParams): TelegramSendChatActionHandler {
   let consecutive401Failures = 0;
   let suspended = false;
+  // Timestamp (ms) before which we skip sendChatAction to respect the backoff window.
+  let retryAfterMs = 0;
 
   const reset = () => {
     consecutive401Failures = 0;
     suspended = false;
+    retryAfterMs = 0;
   };
 
   const sendChatAction = async (
@@ -87,13 +93,18 @@ export function createTelegramSendChatActionHandler({
       return;
     }
 
+    // Skip immediately during backoff window — never sleep here, as this function
+    // is awaited in the message delivery path (startTypingOnText → onReplyStart).
+    // Sleeping would block delivery of the first reply chunk for the full backoff duration.
     if (consecutive401Failures > 0) {
-      const backoffMs = computeBackoff(BACKOFF_POLICY, consecutive401Failures);
-      logger(
-        `sendChatAction backoff: waiting ${backoffMs}ms before retry ` +
-          `(failure ${consecutive401Failures}/${maxConsecutive401})`,
-      );
-      await sleepWithAbort(backoffMs);
+      const now = Date.now();
+      if (now < retryAfterMs) {
+        logger(
+          `sendChatAction skipped: in backoff window for ${Math.ceil((retryAfterMs - now) / 1000)}s ` +
+            `(failure ${consecutive401Failures}/${maxConsecutive401})`,
+        );
+        return;
+      }
     }
 
     try {
@@ -102,10 +113,13 @@ export function createTelegramSendChatActionHandler({
       if (consecutive401Failures > 0) {
         logger(`sendChatAction recovered after ${consecutive401Failures} consecutive 401 failures`);
         consecutive401Failures = 0;
+        retryAfterMs = 0;
       }
     } catch (error) {
       if (is401Error(error)) {
         consecutive401Failures++;
+        const backoffMs = computeBackoff(BACKOFF_POLICY, consecutive401Failures);
+        retryAfterMs = Date.now() + backoffMs;
 
         if (consecutive401Failures >= maxConsecutive401) {
           suspended = true;
@@ -117,7 +131,7 @@ export function createTelegramSendChatActionHandler({
         } else {
           logger(
             `sendChatAction 401 error (${consecutive401Failures}/${maxConsecutive401}). ` +
-              `Retrying with exponential backoff.`,
+              `Skipping for ${Math.ceil(backoffMs / 1000)}s (backoff window).`,
           );
         }
       }
